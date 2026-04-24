@@ -2,6 +2,11 @@ import "./styles.css";
 
 type BookmarkNode = chrome.bookmarks.BookmarkTreeNode;
 const ORDER_STORAGE_KEY = "bookmarkOrder";
+const TIP_BANNER_FIRST_SEEN_AT_KEY = "tipBannerFirstSeenAt";
+const TIP_BANNER_LAST_SHOWN_AT_KEY = "tipBannerLastShownAt";
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const TIP_URL = "https://buymeacoffee.com/joshuasoehn";
 
 function getTree(): Promise<BookmarkNode[]> {
   return new Promise((resolve, reject) => {
@@ -60,6 +65,63 @@ function saveOrder(order: string[]): Promise<void> {
       resolve();
     });
   });
+}
+
+type TipBannerState = {
+  firstSeenAt: number | null;
+  lastShownAt: number | null;
+};
+
+function getTipBannerState(): Promise<TipBannerState> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([TIP_BANNER_FIRST_SEEN_AT_KEY, TIP_BANNER_LAST_SHOWN_AT_KEY], (result) => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) {
+        resolve({ firstSeenAt: null, lastShownAt: null });
+        return;
+      }
+
+      const rawFirstSeenAt = result[TIP_BANNER_FIRST_SEEN_AT_KEY];
+      const rawLastShownAt = result[TIP_BANNER_LAST_SHOWN_AT_KEY];
+      resolve({
+        firstSeenAt: typeof rawFirstSeenAt === "number" ? rawFirstSeenAt : null,
+        lastShownAt: typeof rawLastShownAt === "number" ? rawLastShownAt : null,
+      });
+    });
+  });
+}
+
+function saveTipBannerState(partialState: Partial<TipBannerState>): Promise<void> {
+  return new Promise((resolve) => {
+    const payload: Record<string, number> = {};
+    if (typeof partialState.firstSeenAt === "number") {
+      payload[TIP_BANNER_FIRST_SEEN_AT_KEY] = partialState.firstSeenAt;
+    }
+    if (typeof partialState.lastShownAt === "number") {
+      payload[TIP_BANNER_LAST_SHOWN_AT_KEY] = partialState.lastShownAt;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      resolve();
+      return;
+    }
+
+    chrome.storage.local.set(payload, () => {
+      resolve();
+    });
+  });
+}
+
+function shouldShowTipBanner(now: number, state: TipBannerState): boolean {
+  if (state.firstSeenAt === null) {
+    return false;
+  }
+
+  if (state.lastShownAt === null) {
+    return now - state.firstSeenAt >= THREE_DAYS_MS;
+  }
+
+  return now - state.lastShownAt >= THIRTY_DAYS_MS;
 }
 
 function applyStoredOrder(bookmarks: BookmarkNode[], savedOrder: string[]): BookmarkNode[] {
@@ -134,7 +196,16 @@ function getFaviconUrl(url: string): string {
   return `${base}?pageUrl=${encodeURIComponent(url)}&size=32`;
 }
 
-function renderBookmarks(app: HTMLElement, bookmarks: BookmarkNode[]): void {
+function supportsFaviconLookup(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function renderBookmarks(app: HTMLElement, bookmarks: BookmarkNode[], showTipBanner: boolean): void {
   const cards = bookmarks
     .map((bookmark) => {
       const title = escapeHtml(bookmark.title || "Untitled");
@@ -148,11 +219,14 @@ function renderBookmarks(app: HTMLElement, bookmarks: BookmarkNode[]): void {
         }
       }
       const safeUrl = escapeHtml(url);
-      const faviconUrl = escapeHtml(getFaviconUrl(url));
+      const faviconUrl = supportsFaviconLookup(url) ? escapeHtml(getFaviconUrl(url)) : null;
+      const faviconMarkup = faviconUrl
+        ? `<img class="bookmark-favicon" src="${faviconUrl}" alt="" width="16" height="16" loading="lazy" decoding="async" />`
+        : `<span class="bookmark-favicon placeholder" aria-hidden="true"></span>`;
       return `
         <a class="bookmark-card" data-bookmark-id="${bookmark.id}" draggable="true" href="${safeUrl}" target="_blank" rel="noopener noreferrer">
           <span class="bookmark-main">
-            <img class="bookmark-favicon" src="${faviconUrl}" alt="" width="16" height="16" loading="lazy" decoding="async" />
+            ${faviconMarkup}
             <span class="bookmark-title">${title}</span>
           </span>
           <span class="bookmark-url">${escapeHtml(hostname)}</span>
@@ -165,7 +239,31 @@ function renderBookmarks(app: HTMLElement, bookmarks: BookmarkNode[]): void {
     <section id="bookmarks-grid" class="grid">
       ${cards}
     </section>
+    ${
+      showTipBanner
+        ? `
+    <aside class="tip-banner" role="note" aria-label="Support the developer">
+      <span class="tip-banner-text">
+        If you like this extension, consider
+        <a class="tip-banner-link" href="${TIP_URL}" target="_blank" rel="noopener noreferrer">leaving a small tip</a>.
+      </span>
+      <button class="tip-banner-close" type="button" aria-label="Dismiss tip message">Dismiss</button>
+    </aside>
+    `
+        : ""
+    }
   `;
+}
+
+function attachTipBannerHandlers(app: HTMLElement, onDismiss: () => void): void {
+  const dismissButton = app.querySelector<HTMLButtonElement>(".tip-banner-close");
+  if (!dismissButton) {
+    return;
+  }
+
+  dismissButton.addEventListener("click", () => {
+    onDismiss();
+  });
 }
 
 function attachDragAndDrop(
@@ -315,13 +413,28 @@ async function init(): Promise<void> {
     }
 
     const savedOrder = await getStoredOrder();
+    const now = Date.now();
+    const tipBannerState = await getTipBannerState();
+    let tipBannerImpressionRecorded = false;
+    if (tipBannerState.firstSeenAt === null) {
+      void saveTipBannerState({ firstSeenAt: now });
+    }
+    let showTipBanner = shouldShowTipBanner(now, tipBannerState);
     let orderedLinks = applyStoredOrder(links, savedOrder);
 
     const renderAndBind = (): void => {
-      renderBookmarks(app, orderedLinks);
+      if (showTipBanner && !tipBannerImpressionRecorded) {
+        tipBannerImpressionRecorded = true;
+        void saveTipBannerState({ lastShownAt: Date.now() });
+      }
+      renderBookmarks(app, orderedLinks, showTipBanner);
       attachDragAndDrop(app, orderedLinks, (nextLinks) => {
         orderedLinks = nextLinks;
         void saveOrder(orderedLinks.map((bookmark) => bookmark.id));
+        renderAndBind();
+      });
+      attachTipBannerHandlers(app, () => {
+        showTipBanner = false;
         renderAndBind();
       });
     };

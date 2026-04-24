@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "clean": "rm -rf dist release",
     "build": "vite build",
     "dev": "vite build --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "package": "node ./scripts/package.mjs",
+    "release": "npm run typecheck && npm run build && npm run package"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",

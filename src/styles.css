@@ -46,6 +46,49 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
+.tip-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: #f3f3f3;
+  color: #474747;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tip-banner-text {
+  font-size: 0.84rem;
+  line-height: 1.2rem;
+  text-align: center;
+}
+
+.tip-banner-link {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #3f3f3f;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tip-banner-close {
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: #e3e3e3;
+  color: #3c3c3c;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
 .bookmark-card {
   position: relative;
   display: flex;
@@ -75,6 +118,10 @@ body {
   height: 16px;
   flex: 0 0 16px;
   border-radius: 4px;
+}
+
+.bookmark-favicon.placeholder {
+  background: #d6d6d6;
 }
 
 .bookmark-card:hover {
@@ -152,6 +199,10 @@ body {
     background: #333333;
   }
 
+  .bookmark-favicon.placeholder {
+    background: #5a5a5a;
+  }
+
   .bookmark-card.drop-before::before,
   .bookmark-card.drop-after::after {
     background: #b0b0b0;
@@ -163,5 +214,19 @@ body {
 
   .bookmark-url {
     color: #a3a3a3;
+  }
+
+  .tip-banner {
+    background: #242424;
+    color: #cdcdcd;
+  }
+
+  .tip-banner-link {
+    color: #d9d9d9;
+  }
+
+  .tip-banner-close {
+    background: #343434;
+    color: #d5d5d5;
   }
 }

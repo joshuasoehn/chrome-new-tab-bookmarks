@@ -40,11 +40,19 @@ Then, after edits compile, click **Reload** on the extension card in `chrome://e
 
 ## Scripts
 
+- `npm run clean` - remove `dist/` and `release/`
 - `npm run build` - production build into `dist/`
 - `npm run dev` - watch build for local iteration
 - `npm run typecheck` - TypeScript type check
+- `npm run package` - create upload zip at `release/chrome-new-tab-bookmarks.zip`
+- `npm run release` - run typecheck + build + package in one command
 
 ## Notes
 
 - The extension requests the `bookmarks` permission to read your bookmarks bar.
 - The current implementation shows direct bookmark links in the bookmarks bar (not nested folder contents yet).
+
+## Chrome Web Store
+
+- Submission checklist and listing template: `CHROME_STORE_SUBMISSION.md`
+- Privacy policy template: `PRIVACY_POLICY.md`
