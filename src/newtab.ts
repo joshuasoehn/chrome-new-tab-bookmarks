@@ -4,6 +4,7 @@ type BookmarkNode = chrome.bookmarks.BookmarkTreeNode;
 const ORDER_STORAGE_KEY = "bookmarkOrder";
 const TIP_BANNER_FIRST_SEEN_AT_KEY = "tipBannerFirstSeenAt";
 const TIP_BANNER_LAST_SHOWN_AT_KEY = "tipBannerLastShownAt";
+const TIP_BANNER_DEBUG_FORCE_SHOW_KEY = "tipBannerDebugForceShow";
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const TIP_URL = "https://buymeacoffee.com/joshuasoehn";
@@ -122,6 +123,39 @@ function shouldShowTipBanner(now: number, state: TipBannerState): boolean {
   }
 
   return now - state.lastShownAt >= THIRTY_DAYS_MS;
+}
+
+function getTipBannerDebugQueryOverride(): boolean | null {
+  const raw = new URLSearchParams(window.location.search).get("tipBannerDebug");
+  if (!raw) {
+    return null;
+  }
+
+  const value = raw.trim().toLowerCase();
+  if (value === "1" || value === "true" || value === "show") {
+    return true;
+  }
+
+  if (value === "0" || value === "false" || value === "hide") {
+    return false;
+  }
+
+  return null;
+}
+
+function getTipBannerDebugStorageOverride(): Promise<boolean | null> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([TIP_BANNER_DEBUG_FORCE_SHOW_KEY], (result) => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) {
+        resolve(null);
+        return;
+      }
+
+      const raw = result[TIP_BANNER_DEBUG_FORCE_SHOW_KEY];
+      resolve(typeof raw === "boolean" ? raw : null);
+    });
+  });
 }
 
 function applyStoredOrder(bookmarks: BookmarkNode[], savedOrder: string[]): BookmarkNode[] {
@@ -415,15 +449,19 @@ async function init(): Promise<void> {
     const savedOrder = await getStoredOrder();
     const now = Date.now();
     const tipBannerState = await getTipBannerState();
+    const queryOverride = getTipBannerDebugQueryOverride();
+    const storageOverride = await getTipBannerDebugStorageOverride();
+    const debugOverride = queryOverride ?? storageOverride;
     let tipBannerImpressionRecorded = false;
     if (tipBannerState.firstSeenAt === null) {
       void saveTipBannerState({ firstSeenAt: now });
     }
-    let showTipBanner = shouldShowTipBanner(now, tipBannerState);
+    let showTipBanner =
+      debugOverride === null ? shouldShowTipBanner(now, tipBannerState) : debugOverride;
     let orderedLinks = applyStoredOrder(links, savedOrder);
 
     const renderAndBind = (): void => {
-      if (showTipBanner && !tipBannerImpressionRecorded) {
+      if (showTipBanner && !tipBannerImpressionRecorded && debugOverride !== true) {
         tipBannerImpressionRecorded = true;
         void saveTipBannerState({ lastShownAt: Date.now() });
       }
