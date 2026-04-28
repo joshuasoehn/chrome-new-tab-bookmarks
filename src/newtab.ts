@@ -258,7 +258,7 @@ function renderBookmarks(app: HTMLElement, bookmarks: BookmarkNode[], showTipBan
         ? `<img class="bookmark-favicon" src="${faviconUrl}" alt="" width="16" height="16" loading="lazy" decoding="async" />`
         : `<span class="bookmark-favicon placeholder" aria-hidden="true"></span>`;
       return `
-        <a class="bookmark-card" data-bookmark-id="${bookmark.id}" draggable="true" href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+        <a class="bookmark-card" data-bookmark-id="${bookmark.id}" draggable="true" href="${safeUrl}">
           <span class="bookmark-main">
             ${faviconMarkup}
             <span class="bookmark-title">${title}</span>
